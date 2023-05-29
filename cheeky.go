@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/subcommands"
 	"github.com/isksss/cheeky/commands"
+	"github.com/isksss/cheeky/config"
 )
 
 func main() {
@@ -15,17 +16,23 @@ func main() {
 
 func run() {
 	//todo: subcommands
-	ctx := context.Background()
+	parse()
 
+	ctx := context.Background()
 	os.Exit(int(subcommands.Execute(ctx)))
 }
 
 func init() {
+	config.MakeDir()
+}
+
+func parse() {
 	subcommands.Register(subcommands.CommandsCommand(), "help")
 	subcommands.Register(subcommands.FlagsCommand(), "help")
 	subcommands.Register(subcommands.HelpCommand(), "help")
 
 	subcommands.Register(&commands.InitCmd{}, "")
+	subcommands.Register(&commands.NewCmd{}, "")
 
 	flag.Parse()
 }
