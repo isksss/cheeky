@@ -1,4 +1,4 @@
-module github.com/isksss/cheekey
+module github.com/isksss/cheeky
 
 go 1.20
 
