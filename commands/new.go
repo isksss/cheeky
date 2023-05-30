@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -10,6 +11,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/google/subcommands"
 	"github.com/isksss/cheeky/config"
@@ -81,5 +83,24 @@ func encodeKey(key []byte) []byte {
 }
 
 func saveKeyToFile(path string, key []byte, perm os.FileMode) error {
-	return ioutil.WriteFile(path, key, perm)
+	pubTemplate, privTemplate, err := config.GetTemplates()
+	if err != nil {
+		return err
+	}
+	data := map[string]string{
+		"key": string(key),
+	}
+	var buf bytes.Buffer
+	if strings.Contains(path, "pub.key") {
+		err = pubTemplate.Execute(&buf, data)
+		if err != nil {
+			return err
+		}
+	} else {
+		err = privTemplate.Execute(&buf, data)
+		if err != nil {
+			return err
+		}
+	}
+	return ioutil.WriteFile(path, buf.Bytes(), perm)
 }
