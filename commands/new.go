@@ -4,11 +4,13 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/json"
 	"encoding/pem"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 	"path/filepath"
 
 	"github.com/google/subcommands"
@@ -34,13 +36,27 @@ func (*NewCmd) Usage() string {
 func (*NewCmd) SetFlags(f *flag.FlagSet) {}
 
 func (*NewCmd) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
-	if f.NArg() < 1 {
-		log.Printf("You must provide a name for the new directory.")
+	if f.NArg() < 2 {
+		log.Printf("You must provide a name for the new directory and an email.")
 		return subcommands.ExitFailure
 	}
 	dirname := f.Arg(0)
+	email := f.Arg(1)
 	newDir := filepath.Join(config.GetKeysDir(), dirname)
+	// Check if directory already exists
+	if directoryExists(newDir) {
+		log.Printf("Directory '%s' already exists.", newDir)
+		return subcommands.ExitFailure
+	}
+	// Create directory
 	config.CreateDirIfNotExist(newDir)
+
+	// Create config file
+	err := CreateConfigFile(newDir, email)
+	if err != nil {
+		log.Printf("%v", err)
+		return subcommands.ExitFailure
+	}
 
 	pubKeyPath := filepath.Join(newDir, "id_ed25519.pub")
 	privKeyPath := filepath.Join(newDir, "id_ed25519")
@@ -61,6 +77,47 @@ func (*NewCmd) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) sub
 	fmt.Printf("Private key saved to: %s\n", privKeyPath)
 
 	return subcommands.ExitSuccess
+}
+
+func CreateConfigFile(dirPath string, email string) error {
+	configFilePath := filepath.Join(dirPath, "config.json")
+
+	// Check if config file already exists
+	if directoryExists(configFilePath) {
+		return fmt.Errorf("Config file already exists in the directory.")
+	}
+
+	// Create config file
+	file, err := os.Create(configFilePath)
+	if err != nil {
+		return fmt.Errorf("Failed to create config file: %v", err)
+	}
+	defer file.Close()
+
+	// Extract directory name
+	_, dirName := filepath.Split(dirPath)
+
+	// Create default configuration
+	defaultConfig := Config{
+		Name:  dirName,
+		Email: email, // set email from parameter
+	}
+
+	// Encode default configuration as JSON
+	configData, err := json.MarshalIndent(defaultConfig, "", "  ")
+	if err != nil {
+		return fmt.Errorf("Failed to encode default configuration: %v", err)
+	}
+
+	// Write config data to file
+	_, err = file.Write(configData)
+	if err != nil {
+		return fmt.Errorf("Failed to write default configuration to config file: %v", err)
+	}
+
+	fmt.Printf("Config file created: %s\n", configFilePath)
+
+	return nil
 }
 
 func ValidateKeyPair(pubKey ed25519.PublicKey, privKey ed25519.PrivateKey) bool {
@@ -119,4 +176,22 @@ func WriteKeysToFile(pubKeyPath string, privKeyPath string, pubKey ed25519.Publi
 	}
 
 	return nil
+}
+
+func directoryExists(path string) bool {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true
+	}
+	if os.IsNotExist(err) {
+		return false
+	}
+	log.Printf("Failed to check directory existence: %v", err)
+	return false
+}
+
+// Config struct to hold the configuration data
+type Config struct {
+	Name  string `json:"name"`
+	Email string `json:"email"`
 }
