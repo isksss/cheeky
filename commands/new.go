@@ -87,9 +87,14 @@ func saveKeyToFile(path string, key []byte, perm os.FileMode) error {
 	if err != nil {
 		return err
 	}
-	data := map[string]string{
-		"key": string(key),
+
+	type KeyData struct {
+		Key string
 	}
+	data := KeyData{
+		Key: string(key),
+	}
+
 	var buf bytes.Buffer
 	if strings.Contains(path, "pub.key") {
 		err = pubTemplate.Execute(&buf, data)
