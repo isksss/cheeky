@@ -30,7 +30,7 @@ func (*NewCmd) Synopsis() string {
 }
 
 func (*NewCmd) Usage() string {
-	return "new <name>"
+	return "new <name> <email>"
 }
 
 func (*NewCmd) SetFlags(f *flag.FlagSet) {}
@@ -43,19 +43,36 @@ func (*NewCmd) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) sub
 	dirname := f.Arg(0)
 	email := f.Arg(1)
 	newDir := filepath.Join(config.GetKeysDir(), dirname)
+
+	// Check and create directory
+	if err := checkAndCreateDir(newDir); err != nil {
+		log.Printf("%v", err)
+		return subcommands.ExitFailure
+	}
+
+	// Create config file
+	if err := createConfigAndKeyFiles(newDir, email); err != nil {
+		log.Printf("%v", err)
+		return subcommands.ExitFailure
+	}
+
+	return subcommands.ExitSuccess
+}
+
+func checkAndCreateDir(newDir string) error {
 	// Check if directory already exists
 	if directoryExists(newDir) {
-		log.Printf("Directory '%s' already exists.", newDir)
-		return subcommands.ExitFailure
+		return fmt.Errorf("Directory '%s' already exists", newDir)
 	}
 	// Create directory
 	config.CreateDirIfNotExist(newDir)
+	return nil
+}
 
+func createConfigAndKeyFiles(newDir string, email string) error {
 	// Create config file
-	err := CreateConfigFile(newDir, email)
-	if err != nil {
-		log.Printf("%v", err)
-		return subcommands.ExitFailure
+	if err := CreateConfigFile(newDir, email); err != nil {
+		return err
 	}
 
 	pubKeyPath := filepath.Join(newDir, "id_ed25519.pub")
@@ -63,20 +80,16 @@ func (*NewCmd) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) sub
 
 	pubKey, privKey, err := GenerateKeyPair()
 	if err != nil {
-		log.Printf("%v", err)
-		return subcommands.ExitFailure
+		return err
 	}
 
-	err = WriteKeysToFile(pubKeyPath, privKeyPath, pubKey, privKey)
-	if err != nil {
-		log.Printf("%v", err)
-		return subcommands.ExitFailure
+	if err := WriteKeysToFile(pubKeyPath, privKeyPath, pubKey, privKey); err != nil {
+		return err
 	}
 
 	fmt.Printf("Public key saved to: %s\n", pubKeyPath)
 	fmt.Printf("Private key saved to: %s\n", privKeyPath)
-
-	return subcommands.ExitSuccess
+	return nil
 }
 
 func CreateConfigFile(dirPath string, email string) error {
