@@ -1,21 +1,20 @@
 package commands
 
 import (
-	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
-	"encoding/base64"
+	"encoding/pem"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
-	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/google/subcommands"
 	"github.com/isksss/cheeky/config"
-	"golang.org/x/crypto/ed25519"
+	"github.com/mikesmitty/edkey"
+	"golang.org/x/crypto/ssh"
 )
 
 type NewCmd struct{}
@@ -43,22 +42,18 @@ func (*NewCmd) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) sub
 	newDir := filepath.Join(config.GetKeysDir(), dirname)
 	config.CreateDirIfNotExist(newDir)
 
-	pub, priv, err := generateKeyPair()
+	pubKeyPath := filepath.Join(newDir, "id_ed25519.pub")
+	privKeyPath := filepath.Join(newDir, "id_ed25519")
+
+	pubKey, privKey, err := GenerateKeyPair()
 	if err != nil {
-		log.Printf("Failed to generate key pair: %v", err)
+		log.Printf("%v", err)
 		return subcommands.ExitFailure
 	}
 
-	pubKeyPath := filepath.Join(newDir, "pub.key")
-	privKeyPath := filepath.Join(newDir, "priv.key")
-
-	if err := saveKeyToFile(pubKeyPath, pub, 0644); err != nil {
-		log.Printf("Failed to save public key: %v", err)
-		return subcommands.ExitFailure
-	}
-
-	if err := saveKeyToFile(privKeyPath, priv, 0600); err != nil {
-		log.Printf("Failed to save private key: %v", err)
+	err = WriteKeysToFile(pubKeyPath, privKeyPath, pubKey, privKey)
+	if err != nil {
+		log.Printf("%v", err)
 		return subcommands.ExitFailure
 	}
 
@@ -68,44 +63,60 @@ func (*NewCmd) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) sub
 	return subcommands.ExitSuccess
 }
 
-func generateKeyPair() ([]byte, []byte, error) {
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		return nil, nil, err
+func ValidateKeyPair(pubKey ed25519.PublicKey, privKey ed25519.PrivateKey) bool {
+	// Create a new message
+	message := []byte("test message")
+
+	// Sign the message with the private key
+	signature := ed25519.Sign(privKey, message)
+
+	// Verify the signature with the public key
+	verified := ed25519.Verify(pubKey, message, signature)
+
+	if !verified {
+		log.Printf("Key pair validation failed.")
 	}
-	pubKeyEncoded := encodeKey(pub)
-	privKeyEncoded := encodeKey(priv)
-	return pubKeyEncoded, privKeyEncoded, nil
+
+	return verified
 }
 
-func encodeKey(key []byte) []byte {
-	return []byte(base64.StdEncoding.EncodeToString(key))
+func GenerateKeyPair() (ed25519.PublicKey, ed25519.PrivateKey, error) {
+	pubKey, privKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, nil, fmt.Errorf("Failed to generate key pair: %v", err)
+	}
+
+	// Validate the generated key pair
+	if !ValidateKeyPair(pubKey, privKey) {
+		return nil, nil, fmt.Errorf("Invalid key pair generated.")
+	}
+
+	return pubKey, privKey, nil
 }
 
-func saveKeyToFile(path string, key []byte, perm os.FileMode) error {
-	pubTemplate, privTemplate, err := config.GetTemplates()
+func WriteKeysToFile(pubKeyPath string, privKeyPath string, pubKey ed25519.PublicKey, privKey ed25519.PrivateKey) error {
+	sshPublicKey, err := ssh.NewPublicKey(pubKey)
 	if err != nil {
-		return err
+		return fmt.Errorf("Failed to create new SSH public key: %v", err)
 	}
 
-	type KeyData struct {
-		Key string
+	sshPubKeyBytes := ssh.MarshalAuthorizedKey(sshPublicKey)
+
+	pemBlock := &pem.Block{
+		Type:  "OPENSSH PRIVATE KEY",
+		Bytes: edkey.MarshalED25519PrivateKey(privKey),
 	}
-	data := KeyData{
-		Key: string(key),
+	privKeyBytes := pem.EncodeToMemory(pemBlock)
+
+	err = ioutil.WriteFile(privKeyPath, privKeyBytes, 0600)
+	if err != nil {
+		return fmt.Errorf("Failed to write private key to file: %v", err)
 	}
 
-	var buf bytes.Buffer
-	if strings.Contains(path, "pub.key") {
-		err = pubTemplate.Execute(&buf, data)
-		if err != nil {
-			return err
-		}
-	} else {
-		err = privTemplate.Execute(&buf, data)
-		if err != nil {
-			return err
-		}
+	err = ioutil.WriteFile(pubKeyPath, sshPubKeyBytes, 0644)
+	if err != nil {
+		return fmt.Errorf("Failed to write public key to file: %v", err)
 	}
-	return ioutil.WriteFile(path, buf.Bytes(), perm)
+
+	return nil
 }
