@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"log"
 	"os"
 
 	"github.com/google/subcommands"
@@ -17,6 +18,11 @@ func main() {
 func run() {
 	//todo: subcommands
 	parse()
+
+	if !config.IsGitInstalled() {
+		log.Fatalln("Git is not installed.")
+		os.Exit(1)
+	}
 
 	ctx := context.Background()
 	os.Exit(int(subcommands.Execute(ctx)))
