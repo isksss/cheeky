@@ -33,6 +33,7 @@ func parse() {
 
 	subcommands.Register(&commands.InitCmd{}, "")
 	subcommands.Register(&commands.NewCmd{}, "")
+	subcommands.Register(&commands.SetCmd{}, "")
 
 	flag.Parse()
 }
