@@ -25,3 +25,19 @@ func getXdgConfigHome() string {
 func GetKeysDir() string {
 	return filepath.Join(GetCheekyHome(), "keys")
 }
+
+func IsDir(dir string) bool {
+	info, err := os.Stat(dir)
+	if err != nil {
+		return false
+	}
+	return info.IsDir()
+}
+
+func IsFile(file string) bool {
+	info, err := os.Stat(file)
+	if err != nil {
+		return false
+	}
+	return !info.IsDir()
+}
