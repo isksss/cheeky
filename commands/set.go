@@ -6,6 +6,7 @@ import (
 	"flag"
 	"io/ioutil"
 	"log"
+	"os"
 	"path/filepath"
 
 	"github.com/google/subcommands"
@@ -79,6 +80,16 @@ func (c *SetCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 	// keys_dir/user_nameにあるid_ed25519を~/.ssh/id_ed25519にエイリアスする
 	// すでに~/.ssh/id_ed25519がある場合は削除する
 	// すでに~/.ssh/id_ed25519.pubがある場合は削除する
+
+	// .ssh dirがあるかどうか
+	if !config.IsDir(config.GetSSHDir()) {
+		// .ssh dirを作成する
+		err = os.MkdirAll(config.GetSSHDir(), 0755)
+		if err != nil {
+			log.Printf("%v", err)
+			return subcommands.ExitFailure
+		}
+	}
 
 	// ~/.ssh/id_ed25519があるかどうか
 	ssh_dir := config.GetSSHDir()
